@@ -1,0 +1,137 @@
+<VirtualHost *:80>
+  ServerAdmin admin@<%= node[:domain] %>
+  ServerName <%= @params[:server_name] %>
+  <% if node[:confluence][:virtual_host_alias] -%>
+  <% va_list = node[:confluence][:virtual_host_alias].kind_of?(Array) ? node[:confluence][:virtual_host_alias] : [ node[:confluence][:virtual_host_alias] ] -%>
+  <% va_list.each do |va| -%>
+  ServerAlias <%= va %>
+  <% end -%>
+  <% end -%>
+
+  ErrorLog <%= node[:apache][:log_dir] %>/<%= node[:confluence][:virtual_host_name] %>-error.log
+  TransferLog <%= node[:apache][:log_dir] %>/<%= node[:confluence][:virtual_host_name] %>-access.log
+  RewriteEngine On
+  RewriteLog <%= node[:apache][:log_dir] %>/<%= node[:confluence][:virtual_host_name] %>-rewrite.log
+  RewriteLogLevel 0
+
+  <% if node[:confluence][:ssl_key] != "" && node[:confluence][:ssl_cert] != "" -%>
+  RedirectMatch ^/(.*)$ https://<%= node[:confluence][:virtual_host_name] %>/$1
+  <% else -%>
+
+  # Canonical host, <%= @params[:server_name] %>
+  RewriteCond %{HTTP_HOST}   !^<%= @params[:server_name].gsub('.', '\.') %> [NC]
+  RewriteCond %{HTTP_HOST}   !^$
+  RewriteRule ^/(.*)$        http://<%= @params[:server_name] %>/$1 [L,R=301]
+
+  ProxyRequests Off
+  ProxyPreserveHost On
+  ProxyPass / ajp://127.0.0.1:<%= node[:confluence][:ajp_port] %>/
+  ProxyPassReverse / ajp://127.0.0.1:<%= node[:confluence][:ajp_port] %>/
+
+  <% if node[:confluence][:http_user] != "" && node[:confluence][:http_passwd] != "" -%>
+  #RequestHeader unset Authorization
+  <Location />
+    AuthType Basic
+    AuthName "Private Site"
+    AuthUserFile /etc/httpd/conf.d/<%= node[:confluence][:virtual_host_name] %>.htpasswd
+    Require valid-user
+    Order allow,deny
+    #Allow from all
+    Allow from 212.161.9.160/28
+    Satisfy Any
+  </Location>
+
+  <Location /plugins/servlet/confluence/default>
+    Allow from all
+    Satisfy Any
+  </Location>
+  
+  <Location /webdav>
+    Allow from all
+    Satisfy Any
+  </Location>
+  <% else -%>
+  <Proxy *>
+    Order deny,allow
+    Allow from all
+  </Proxy>
+  <% end -%>
+  <% end -%>
+
+</VirtualHost>
+
+<% if node[:confluence][:ssl_key] != "" && node[:confluence][:ssl_cert] != "" -%>
+<VirtualHost <%= node[:ipaddress] %>:443>
+
+  SSLEngine on
+  SSLProtocol -all +TLSv1 +SSLv3
+  SSLCipherSuite HIGH:MEDIUM:!aNULL:+SHA1:+MD5:+HIGH:+MEDIUM
+  SSLCertificateFile <%= node[:confluence][:ssl_cert] %>
+  SSLCertificateKeyFile <%= node[:confluence][:ssl_key] %>
+  SSLCertificateChainFile <%= node[:confluence][:ssl_intermediate_cert] %>
+  SSLOptions +StrictRequire
+
+  <Files ~ "\.(cgi|shtml|phtml|php3?)$">
+    SSLOptions +StdEnvVars
+  </Files>
+
+  ServerAdmin admin@<%= node[:domain] %>
+  <% if node[:confluence][:virtual_host_name] -%>
+  ServerName <%= node[:confluence][:virtual_host_name] %>
+  <% end -%>
+  <% if node[:confluence][:virtual_host_alias] -%>
+  <% va_list = node[:confluence][:virtual_host_alias].kind_of?(Array) ? node[:confluence][:virtual_host_alias] : [ node[:confluence][:virtual_host_alias] ] -%>
+  <% va_list.each do |va| -%>
+  ServerAlias <%= va %>
+  <% end -%>
+  <% end -%>
+
+  ErrorLog <%= node[:apache][:log_dir] %>/<%= node[:confluence][:virtual_host_name] %>-ssl-error.log
+  CustomLog <%= node[:apache][:log_dir] %>/<%= node[:confluence][:virtual_host_name] %>-ssl-access.log combined
+
+  # Canonical host, <%= @params[:server_name] %>
+  RewriteEngine On
+  RewriteCond %{HTTP_HOST}   !^<%= @params[:server_name].gsub('.', '\.') %> [NC]
+  RewriteCond %{HTTP_HOST}   !^$
+  RewriteRule ^/(.*)$        https://<%= @params[:server_name] %>/$1 [L,R=301]
+
+  ProxyRequests Off
+  ProxyPreserveHost On
+
+  ProxyPass / ajp://127.0.0.1:<%= node[:confluence][:ajp_port] %>/
+  ProxyPassReverse / ajp://127.0.0.1:<%= node[:confluence][:ajp_port] %>
+
+
+  <% if node[:confluence][:http_user] != "" && node[:confluence][:http_passwd] != "" -%>
+  #RequestHeader unset Authorization
+
+  <Location />
+    AuthType Basic
+    AuthName "Private Site"
+    AuthUserFile /etc/httpd/conf.d/<%= node[:confluence][:virtual_host_name] %>.htpasswd
+    Require valid-user
+    Order allow,deny
+    #Allow from all
+    Allow from 212.161.9.160/28
+    Satisfy Any
+  </Location>
+
+  <Location /webdav>
+    Allow from all
+    Satisfy Any
+  </Location>
+
+  <Location /plugins/servlet/confluence>
+    Allow from all
+    Satisfy Any
+  </Location>
+
+  <% else -%>
+  <Proxy *>
+    Order deny,allow
+    Allow from all
+  </Proxy>
+  <% end -%>
+
+</VirtualHost>
+<% end -%>

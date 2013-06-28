@@ -1,0 +1,83 @@
+#!/bin/sh -e
+# Confluence startup script
+#chkconfig: 2345 80 05
+#description: Confluence
+ 
+# Define some variables
+# Name of app ( JIRA, Confluence, etc )
+APP=confluence
+# Name of the user to run as
+USER=java
+# Location of application's bin directory
+CATALINA_HOME=/srv/dguk_groups/confluence
+# Location of Java JDK
+source /etc/profile.d/java.sh
+ 
+case "$1" in
+  # Start command
+  start)
+    echo "Starting $APP"
+    /bin/su -m $USER -c "$CATALINA_HOME/bin/startup.sh &> /dev/null"
+    ;;
+  # Stop command
+  stop)
+    echo "Stopping $APP"
+    /bin/su -m $USER -c "$CATALINA_HOME/bin/shutdown.sh &> /dev/null"
+    DEAD=0
+    PID=0
+    COUNTER=0
+
+    until [[ $DEAD -gt 0 || $COUNTER -gt 9 ]]
+    do
+      sleep 6
+      PID=`pgrep -f $CATALINA_HOME`
+      DEAD=$?
+      let COUNTER=$COUNTER+1
+    done
+
+    if [ $DEAD -eq 0 ]
+    then
+      echo "$APP has not responded to the shutdown command... Killing instead"
+      kill $PID
+    fi
+
+    COUNTER=0
+
+    until [[ $DEAD -gt 0 || $COUNTER -gt 9 ]]
+    do 
+      sleep 6
+      PID=`pgrep -f $CATALINA_HOME`
+      DEAD=$?
+      let COUNTER=$COUNTER+1
+    done
+
+    if [ $DEAD -eq 0 ]
+    then
+      echo "$APP has not responded to the shutdown command... Killing without prejudice (-9) instead"
+      kill -9 $PID
+    fi
+
+    echo "$APP stopped successfully"
+    ;;
+  # Restart command
+  restart)
+    $0 stop
+    sleep 5
+    $0 start
+       ;;
+  status)
+    PID=`pgrep -f $CATALINA_HOME`
+    if [ $PID -eq 0 ]
+    then
+      echo "Confluence is running with PID $PID"
+    else
+      echo "Confluence isn't running!"
+    fi
+    ;;
+  *)
+    echo "Usage: /etc/init.d/$APP {start|restart|stop}"
+    exit 1
+    ;;
+esac
+ 
+exit 0
